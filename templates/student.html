@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Student portal · DOC-SECURE</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+</head>
+<body data-price-per-document="{{ '%.2f'|format(price_per_document) }}">
+  <header class="top">
+    <a class="wordmark" href="{{ url_for('student_home') }}">DOC-SECURE</a>
+    <span>{{ student['name'] }} · <a class="top-link" href="{{ url_for('logout') }}">Sign out</a></span>
+  </header>
+  <main class="wrap">
+    <p class="eyebrow">Student services</p>
+    <h1>Document requests</h1>
+    <p class="intro">Request official records, follow the review, and present your encrypted QR at the registrar counter.</p>
+    <div class="grid">
+      <section aria-label="Student requests">
+        <article class="card">
+          <h2>Profile and clearance</h2>
+          <p><strong>{{ student['name'] }}</strong></p>
+          <p>{{ student['student_id'] }} · {{ student['course'] }} · {{ student['year_level'] }}</p>
+          {% if student['holds'] %}
+            <p class="notice">Clearance hold(s): {{ student['holds']|join(', ') }}. Review and sign the undertaking before submitting a request.</p>
+          {% else %}
+            <p class="notice">No clearance hold detected.</p>
+          {% endif %}
+        </article>
+
+        <article class="card">
+          <h2>Start a request</h2>
+          <form method="post" action="{{ url_for('create_request') }}" enctype="multipart/form-data">
+            <fieldset>
+              <legend>Select documents</legend>
+              {% for code, title in docs.items() %}
+                <div class="choice document-choice">
+                  <label class="document-name" for="select-{{ code }}"><input id="select-{{ code }}" type="checkbox" name="documents" value="{{ code }}"> {{ title }}</label>
+                  <label class="copy-control" for="copies-{{ code }}">Copies<input id="copies-{{ code }}" type="number" name="copies_{{ code }}" min="1" max="10" value="1" disabled aria-label="Copies of {{ title }}"></label>
+                  <span class="doc-price">PHP {{ '%.2f'|format(price_per_document) }} each</span>
+                </div>
+              {% endfor %}
+            </fieldset>
+            <div class="total-due"><strong>Total Amount Due</strong><output id="total-amount" aria-live="polite">PHP 0.00</output></div>
+            <section class="payment-block" aria-labelledby="payment-title">
+              <h3 id="payment-title">Payment QR for document requests</h3>
+              <figure class="payment-qr">
+                <img src="{{ url_for('static', filename='payment-qr.jpg') }}" alt="Instapay QR code for paying document request fees" loading="lazy">
+                <figcaption>Scan with your payment app. Transfer fees may apply.</figcaption>
+              </figure>
+              <p>Each document is PHP 100.00. Confirm the displayed total above and check the recipient in your payment app before sending.</p>
+            </section>
+            {% if payment_url %}
+              <p><a class="btn" href="{{ payment_url }}" target="_blank" rel="noopener">Open university payment channel</a></p>
+            {% else %}
+              <p class="notice">Ask the cashier for the current official payment link or QR before paying. The channel can be configured with DOCSECURE_PAYMENT_URL.</p>
+            {% endif %}
+            <label for="or-number">Official Receipt (OR) number</label>
+            <input id="or-number" type="text" name="or_number" required maxlength="80">
+            <label for="receipt">Payment receipt proof</label>
+            <input id="receipt" type="file" name="receipt" accept="image/png,image/jpeg,image/webp,application/pdf" required>
+            {% if student['holds'] %}
+              <label class="agreement-check"><input type="checkbox" name="undertaking_signed" value="yes" required onclick="document.getElementById('agreement').showModal()"> I have read and signed the Digital Undertaking Agreement</label>
+              <dialog id="agreement" aria-labelledby="agreement-title">
+                <h2 id="agreement-title">Digital Undertaking Agreement</h2>
+                <p>I understand that the registrar identified a clearance hold. I undertake to complete the listed clearance and acknowledge that document processing follows university policy.</p>
+                <button type="button" onclick="document.getElementById('agreement').close()">I understand</button>
+              </dialog>
+            {% endif %}
+            <button class="submit-action" type="submit">Submit request</button>
+          </form>
+        </article>
+
+        <article class="card">
+          <h2>Request tracking</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Request</th><th>Documents</th><th>Total Amount Due</th><th>Status</th><th>Notice and action</th></tr></thead>
+              <tbody>
+                {% for item in requests %}
+                  <tr>
+                    <td>{{ item['request_id'] }}</td>
+                    <td>{{ item['documents_json'] }}<br><small>Copies: {{ item['copies_json'] }}</small></td>
+                    <td>PHP {{ '%.2f'|format(item['amount_due']) }}</td>
+                    <td><span class="pill {{ item['status']|lower }}">{{ item['status'] }}</span></td>
+                    <td>
+                      {% if item['rejection_note'] %}<p class="error">{{ item['rejection_note'] }}</p><small>Correct the receipt or OR details and submit a new request.</small>{% endif %}
+                      {% if item['status'] == 'Approved' and not item['qr_used'] %}
+                        <form method="post" action="{{ url_for('issue_qr', request_id=item['request_id']) }}"><button type="submit">Download QR Code</button></form>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="5">No requests yet. Your submitted requests will appear here.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <aside class="card process-card">
+        <h2>How it works</h2>
+        <ol>
+          <li>Confirm your identity and clearance</li>
+          <li>Select documents and submit payment proof</li>
+          <li>Wait for OR and receipt review</li>
+          <li>Generate your encrypted QR after approval</li>
+          <li>Present it at the registrar counter</li>
+        </ol>
+        <p class="notice">A rejection includes a correction notice. After a successful counter scan and document release, status changes to Claimed.</p>
+      </aside>
+    </div>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

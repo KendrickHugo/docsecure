@@ -1,0 +1,10 @@
+{
+  "name": "doc-secure",
+  "version": "1.0.0",
+  "private": true,
+  "description": "npm shortcut scripts for the Python DOC-SECURE app",
+  "scripts": {
+    "dev": "python main.py",
+    "start": "python main.py"
+  }
+}

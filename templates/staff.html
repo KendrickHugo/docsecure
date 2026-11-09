@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Staff workspace · DOC-SECURE</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='theme.css') }}">
+</head>
+<body>
+  <header class="top">
+    <a class="wordmark" href="{{ url_for('admin_home') }}">DOC-SECURE · {{ role|title }}</a>
+    <a class="top-link" href="{{ url_for('logout') }}">End session</a>
+  </header>
+  <main class="wrap">
+    <p class="eyebrow">Registrar operations</p>
+    <h1>Request audit workspace</h1>
+    <p class="intro">Review student details, clearance, payment proof, and official receipt references.</p>
+    {% if session.get('scan_result') %}
+      <p class="scan-result {{ 'pass' if session['scan_result'][0] else 'fail' }}" role="status">{{ session.pop('scan_result')[1] }}</p>
+    {% endif %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}<p class="flash {{ category }}">{{ message }}</p>{% endfor %}
+    {% endwith %}
+
+    <section class="card">
+      <h2>Incoming requests and receipt review</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Request and student</th><th>Documents and clearance</th><th>Amount Due</th><th>OR and receipt</th><th>Status and action</th></tr></thead>
+          <tbody>
+            {% for item in rows %}
+              <tr>
+                <td><strong>{{ item['request_id'] }}</strong><br>{{ item['student_id'] }} · {{ item['name'] }}<br>{{ item['course'] }} · {{ item['year_level'] }}</td>
+                <td>{{ item['documents_json'] }}<br><small>Copies: {{ item['copies_json'] }} · Holds: {{ item['holds_json'] }}</small>{% if item['undertaking_signed'] %}<br><strong>Undertaking signed</strong>{% endif %}</td>
+                <td>PHP {{ '%.2f'|format(item['amount_due']) }}</td>
+                <td>{{ item['or_number'] }}<br><a href="{{ url_for('view_receipt', request_id=item['request_id']) }}" target="_blank" rel="noopener">View receipt proof</a></td>
+                <td>
+                  <span class="pill {{ item['status']|lower }}">{{ item['status'] }}</span>
+                  {% if role == 'registrar' and item['status'] in ['Pending verification', 'Rejected'] %}
+                    <form class="review-form" method="post" action="{{ url_for('decision', request_id=item['request_id']) }}">
+                      <label>Verified OR number<input name="or_number" value="{{ item['or_number'] }}"></label>
+                      <button name="action" value="approve">Approve and bind OR</button>
+                      <label>Correction notice<textarea name="note" placeholder="Explain what the student needs to correct"></textarea></label>
+                      <button class="reject" name="action" value="reject">Reject with correction</button>
+                    </form>
+                  {% elif role == 'registrar' and item['status'] == 'Approved' %}
+                    <form method="post" action="{{ url_for('mark_claimed', request_id=item['request_id']) }}"><button>Mark Claimed after PASS</button></form>
+                  {% elif role == 'cashier' %}
+                    <p class="staff-note">Cashier view: receipt and OR verification.</p>
+                  {% endif %}
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5">No requests are waiting for review.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% if role == 'registrar' %}
+      <section class="card">
+        <h2>Counter QR scanner</h2>
+        <p>Upload a QR image or paste its decoded payload. The system checks the signature, decryption, expiry, request details, and one-time nonce.</p>
+        <form method="post" action="{{ url_for('scan_qr') }}" enctype="multipart/form-data">
+          <label for="payload">Decoded QR payload</label>
+          <textarea class="scan-payload" id="payload" name="payload" rows="5"></textarea>
+          <label for="qr-image">Or upload QR image</label>
+          <input id="qr-image" type="file" name="qr_image" accept="image/*">
+          <button class="submit-action" type="submit">Decrypt and validate</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Immutable audit trail</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Time (UTC)</th><th>Actor</th><th>Action</th><th>Metadata and chain hash</th></tr></thead>
+            <tbody>
+              {% for event in audit %}
+                <tr><td>{{ event['created_at'] }}</td><td>{{ event['actor'] }}</td><td>{{ event['action'] }}</td><td><small>{{ event['metadata_json'] }}<br>SHA256 {{ event['entry_hash'] }}</small></td></tr>
+              {% else %}<tr><td colspan="4">No audit events yet.</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endif %}
+  </main>
+</body>
+</html>
